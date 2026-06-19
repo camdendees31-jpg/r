@@ -1,0 +1,55 @@
+name: Build & Publish Subscribe Button Mod
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 6
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Build Release
+        run: dotnet build src/SubscribeButtonMod.csproj -c Release
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp src/bin/Release/net6.0/SubscribeButtonMod.dll dist/
+          
+          # Include the subscribe sound if present
+          [ -f audio/subscribe.wav ] && cp audio/subscribe.wav dist/
+          
+          cd dist && zip -r ../SubscribeButtonMod-${{ github.ref_name }}.zip .
+
+      - name: Upload to mod.io
+        env:
+          MODIO_TOKEN: ${{ secrets.MODIO_OAUTH_TOKEN }}
+          MODIO_GAME_ID: 3809
+          MODIO_MOD_ID: ${{ secrets.MODIO_MOD_ID }}
+        run: |
+          TAG_NOTES=$(git tag -l --format='%(contents)' ${{ github.ref_name }})
+          curl -X POST \
+            "https://api.mod.io/v1/games/${MODIO_GAME_ID}/mods/${MODIO_MOD_ID}/files" \
+            -H "Authorization: Bearer ${MODIO_TOKEN}" \
+            -F "filedata=@SubscribeButtonMod-${{ github.ref_name }}.zip" \
+            -F "version=${{ github.ref_name }}" \
+            -F "changelog=${TAG_NOTES:-No changelog provided}" \
+            -F "active=true"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SubscribeButtonMod-${{ github.ref_name }}.zip
+          body: |
+            Subscribe button mod for BONELAB!
+            
+            **Install:** Drop `SubscribeButtonMod.dll` + `subscribe.wav` into your `BONELAB/Mods/` folder.
+            **Spawn:** Press `B` in-game.
